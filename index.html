@@ -15,7 +15,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000;
+            background-color: #000; /* Latar gelap sementara canvas loading */
         }
 
         .fullscreen-container {
@@ -25,10 +25,10 @@
             cursor: pointer;
         }
 
-        .fullscreen-image {
+        /* Canvas untuk melukis animasi sprite */
+        #spriteCanvas {
             width: 100%;
             height: 100%;
-            object-fit: cover;
             display: block;
         }
 
@@ -77,14 +77,9 @@
 </head>
 <body>
 
-    <!-- Gambar Penuh Tanpa Halangan -->
+    <!-- Gambar Penuh Tanpa Halangan (Kini menggunakan Canvas) -->
     <div id="trigger" class="fullscreen-container">
-        <img 
-            src="https://i.postimg.cc/zBMsL9VC/460719.png" 
-            alt="Background Update" 
-            class="fullscreen-image"
-            onerror="this.src='https://via.placeholder.com/1080x1920?text=Image+Not+Found'"
-        >
+        <canvas id="spriteCanvas"></canvas>
     </div>
 
     <!-- Modal Sinematik di Tengah -->
@@ -120,23 +115,108 @@
     </div>
 
     <script>
+        // --- LOGIK ANIMASI SPRITE (MENGGUNAKAN DELTA TIME) ---
+        const canvas = document.getElementById('spriteCanvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        // Pautan gambar baharu dari Cloudinary
+        img.src = "https://res.cloudinary.com/dsqi4tm8x/image/upload/v1772471484/460781_qbhjpi.png";
+
+        // Tetapan Spritesheet
+        const cols = 7;
+        const rows = 7;
+        const totalFrames = cols * rows; // 49 frames
+        const fps = 15; // Kelajuan animasi 15 FPS
+        const frameInterval = 1000 / fps; // Masa untuk setiap frame dalam milisaat
+        
+        let currentFrame = 0;
+        let lastTime = 0;
+        let isAnimating = false;
+
+        // Fungsi resize canvas supaya muat skrin penuh
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Draw immediately on resize to prevent flickering
+            if (img.complete && !isAnimating) {
+                drawFrame(0);
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawFrame(deltaTime) {
+            // Bersihkan canvas sebelum lukis frame baru
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (img.complete) {
+                // Kira saiz sebenar satu frame dari sumber imej
+                const frameW = img.width / cols;
+                const frameH = img.height / rows;
+                
+                // Cari kedudukan (X, Y) untuk potong frame dari spritesheet
+                const srcX = (currentFrame % cols) * frameW;
+                const srcY = Math.floor(currentFrame / cols) * frameH;
+
+                // Logik untuk jadikan imej 'object-fit: cover' dalam canvas
+                const scale = Math.max(canvas.width / frameW, canvas.height / frameH);
+                const destW = frameW * scale;
+                const destH = frameH * scale;
+                
+                // Center kan imej
+                const destX = (canvas.width - destW) / 2;
+                const destY = (canvas.height - destH) / 2;
+
+                // Lukis frame ke atas canvas
+                ctx.drawImage(img, srcX, srcY, frameW, frameH, destX, destY, destW, destH);
+            }
+        }
+
+        // Loop Animasi
+        function animateSprite(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+
+            // Update frame berdasarkan delta time
+            if (deltaTime >= frameInterval) {
+                currentFrame = (currentFrame + 1) % totalFrames;
+                // Kekalkan baki masa untuk timing yang konsisten (elak animasi lari/drift)
+                lastTime = timestamp - (deltaTime % frameInterval); 
+                drawFrame(deltaTime);
+            } else if (!isAnimating) {
+                drawFrame(0);
+            }
+
+            isAnimating = true;
+            requestAnimationFrame(animateSprite);
+        }
+
+        // Mula animasi selepas imej dimuat turun
+        img.onload = () => {
+            resizeCanvas();
+            requestAnimationFrame(animateSprite);
+        };
+
+
+        // --- LOGIK MODAL SINEMATIK ---
         const trigger = document.getElementById('trigger');
         const modal = document.getElementById('modal');
         const modalContent = document.getElementById('modalContent');
 
-        // Buka Modal Sinematik
+        // Buka Modal
         trigger.addEventListener('click', () => {
             modal.classList.remove('pointer-events-none');
             modal.classList.add('opacity-100');
             
-            // Trigger CSS animations dengan sedikit delay
             requestAnimationFrame(() => {
                 modalContent.classList.add('modal-active');
             });
         });
 
-        // Tutup Modal Sinematik
-        function closeModal() {
+        // Tutup Modal
+        function closeModal(e) {
+            if (e) e.stopPropagation(); // Elak trigger pada div belakang
             modalContent.classList.remove('modal-active');
             modal.classList.remove('opacity-100');
             modal.classList.add('pointer-events-none');
